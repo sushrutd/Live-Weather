@@ -7,19 +7,22 @@
 //
 
 #import <UIKit/UIKit.h>
-#import "SharedClient.h"
 #import "WeatherAPIKey.h"
 #import "WeatherCell.h"
 #import <QuartzCore/QuartzCore.h>
+#import <CoreLocation/CoreLocation.h>
 
-@interface WeatherInfoViewController : UIViewController<UITableViewDataSource,UITableViewDelegate>
+@interface WeatherInfoViewController:UIViewController<UITableViewDataSource,UITableViewDelegate,CLLocationManagerDelegate>
 {
-    
     NSMutableArray *listArray;
     NSMutableArray * mainArr;
-        
+    NSArray *colorsArray;
+    CLLocationManager *locationManager;
+    CLGeocoder *geocoder;
+    CLPlacemark *placemark;
+
 }
 @property (weak, nonatomic) IBOutlet UITableView *weatherInfoTable;
-
+@property (nonatomic, strong) NSCache *cache;
 - (double)kelvinToCelsius:(double)degreesKelvin;
 @end

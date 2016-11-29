@@ -9,7 +9,6 @@
 #ifndef LiveWeather_WeatherAPIKey_h
 #define LiveWeather_WeatherAPIKey_h
 
-static NSString * const kWeatherUndergroundAPIKey = @"a23ffa194c98e59010b70c1c76cb1999";
-
+static NSString * const kOpenWeatherMapAPIKey = @"a23ffa194c98e59010b70c1c76cb1999";
 
 #endif

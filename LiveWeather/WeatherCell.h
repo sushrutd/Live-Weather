@@ -13,5 +13,6 @@
 @property (weak, nonatomic) IBOutlet UILabel *descriptionLabel;
 @property (weak, nonatomic) IBOutlet UILabel *temperatureLabel;
 @property (weak, nonatomic) IBOutlet UILabel *dateLAbel;
+@property (weak, nonatomic) IBOutlet UIView *cellBackgroundView;
 
 @end

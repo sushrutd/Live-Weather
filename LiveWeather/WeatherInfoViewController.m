@@ -8,19 +8,11 @@
 
 #import "WeatherInfoViewController.h"
 
-
-NSString *const BASE_URL_STRING = @"http://openweathermap.org/data/2.5/forecast/daily?";
-//NSString *const BASE_URL_STRING = @"http://openweathermap.org/data/2.5/history/city?";
-
+NSString *const BASE_URL_STRING = @"http://api.openweathermap.org/data/2.5/forecast/daily?";
 NSString *const IMAGE_URL_STRING = @"http://openweathermap.org/img/w/";
 
 @interface WeatherInfoViewController ()
-@property (nonatomic, strong) NSMutableData *responseData;
-@property (nonatomic, strong) UIImageView *backgroundImageView;
-@property (nonatomic, strong) UIImageView *blurredImageView;
-@property (nonatomic, assign) CGFloat screenHeight;
 @end
-
 
 @implementation WeatherInfoViewController
 
@@ -36,35 +28,28 @@ NSString *const IMAGE_URL_STRING = @"http://openweathermap.org/img/w/";
 - (void)viewDidLoad
 {
     [super viewDidLoad];
-    listArray = [[NSMutableArray alloc]init];
-    [self makeWeatherRequest];
+    _cache = [[NSCache alloc]init];
+    locationManager = [[CLLocationManager alloc] init];
+    locationManager.delegate = self;
+    locationManager.desiredAccuracy = kCLLocationAccuracyBest;
+    [locationManager requestAlwaysAuthorization];
+    [locationManager startUpdatingLocation];
     
-   }
-
--(void)makeWeatherRequest
-{
-    mainArr=[[NSMutableArray alloc]init]; // to store values
-    for (NSString *tempObj in [SharedClient sharedInstance].cityArray) {
-         NSString *urlString =[NSString stringWithFormat:@"%@q=%@&APPID=%@&cnt=14",BASE_URL_STRING,tempObj,kWeatherUndergroundAPIKey];
-        
-        
-        NSURL *url =[NSURL URLWithString:urlString];
-        NSURLRequest *request = [NSURLRequest requestWithURL:url];
-        
-        NSURLResponse *response = NULL;
-        NSError *requestError = NULL;
-        
-        NSData *responseData = [NSURLConnection sendSynchronousRequest:request        returningResponse:&response error:&requestError];
-        
-        NSArray *parsedObject= [NSJSONSerialization JSONObjectWithData:responseData options:NSJSONReadingMutableContainers error:nil];
-        
-        if (parsedObject==nil) {
-            UIAlertView *alert = [[UIAlertView alloc]initWithTitle:@"Error" message:nil delegate:self cancelButtonTitle:@"Retry" otherButtonTitles:nil, nil];
-            [alert show];
-        }
-        
-        listArray = [parsedObject valueForKey:@"list"];
+    geocoder = [[CLGeocoder alloc] init];
+    
+    listArray = [[NSMutableArray alloc]init];
+    colorsArray = @[@"#FC9B5B",@"#DFEC57",@"#58DEF9",@"#EDDFCB",@"#FBED68",@"#FC9B5B",@"#DFEC57",@"#58DEF9",@"#EDDFCB",@"#FBED68",@"#FC9B5B",@"#DFEC57",@"#58DEF9",@"#EDDFCB",@"#FBED68"];
+    
+    self.weatherInfoTable.backgroundColor = [self colorWithHexString:@"#43424F"];
+    
 }
+-(UIColor*)colorWithHexString:(NSString*)hex
+{
+    unsigned rgbValue = 0;
+    NSScanner *scanner = [NSScanner scannerWithString:hex];
+    [scanner setScanLocation:1]; // bypass '#' character
+    [scanner scanHexInt:&rgbValue];
+    return [UIColor colorWithRed:((rgbValue & 0xFF0000) >> 16)/255.0 green:((rgbValue & 0xFF00) >> 8)/255.0 blue:(rgbValue & 0xFF)/255.0 alpha:1.0];
 }
 
 -(NSString *)convertDate:(double)dateValue
@@ -82,7 +67,7 @@ NSString *const IMAGE_URL_STRING = @"http://openweathermap.org/img/w/";
         return @"Today";
     }
     else{
-    return dateString;
+        return dateString;
     }
 }
 
@@ -91,18 +76,14 @@ NSString *const IMAGE_URL_STRING = @"http://openweathermap.org/img/w/";
     const double ZERO_CELSIUS_IN_KELVIN = 273.15;
     return degreesKelvin - ZERO_CELSIUS_IN_KELVIN;
 }
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView{
+    return 1;
+}
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
 {
-    return 14;
+    return [listArray count];
 }
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section{
-    NSString *temp=nil;
-    if (section == 0) {
-        temp=[[SharedClient sharedInstance].cityArray objectAtIndex:0];
-        
-    }
-    return temp;
-}
+
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath{
     
     static NSString *CellIdentifier = @"Cell";
@@ -111,49 +92,124 @@ NSString *const IMAGE_URL_STRING = @"http://openweathermap.org/img/w/";
         NSArray *nib = [[NSBundle mainBundle]loadNibNamed:@"WeatherCell" owner:self options:nil];
         cell = nib[0];
     }
-    //Description
-    cell.descriptionLabel.text = [[[[listArray objectAtIndex:indexPath.row]valueForKey:@"weather"]objectAtIndex:0]valueForKey:@"description"];
-    //cell.descriptionLabel.textColor = [UIColor whiteColor];
     
-    //Temperature
-    double tempInCelcius = [self kelvinToCelsius:[[[[listArray objectAtIndex:indexPath.row]valueForKey:@"temp"]valueForKey:@"day"]doubleValue]];
-    int temp = (int)tempInCelcius;
-    cell.temperatureLabel.text = [NSString stringWithFormat:@"%d C",temp];
-   // cell.temperatureLabel.textColor = [UIColor whiteColor];
-    
-    //Date
-    double tempDate = [[[listArray objectAtIndex:indexPath.row]valueForKey:@"dt"]doubleValue];
-    NSString *dateStr = [self convertDate:tempDate];
-    cell.dateLAbel.text = dateStr;
-     //cell.dateLAbel.textColor = [UIColor whiteColor];
-    
-    //Icon
-    NSString *iconName = [[[[listArray objectAtIndex:indexPath.row]valueForKey:@"weather"]objectAtIndex:0]valueForKey:@"icon"];
-    
-    
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        UIImage *weatherImage = [UIImage imageWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:[NSString stringWithFormat:@"%@%@.png",IMAGE_URL_STRING,iconName]]]];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            
-            [cell.iconImageView setImage:weatherImage];
+    @try {
         
-            // cell.iconImageView.layer.shadowRadius =2.0;
-            //cell.iconImageView.layer.shadowColor = [[UIColor colorWithRed:0 green:0 blue:0 alpha:0.7]CGColor];
-            
-        });
+        NSString *color = [colorsArray objectAtIndex:indexPath.row];
+        cell.cellBackgroundView.backgroundColor = [self colorWithHexString:color];
+        cell.backgroundColor = [self colorWithHexString:@"#43424F"];
+        cell.cellBackgroundView.layer.cornerRadius = 5;
         
-    });
+        //Description
+        cell.descriptionLabel.text = [[[[listArray objectAtIndex:indexPath.row]valueForKey:@"weather"]objectAtIndex:0]valueForKey:@"description"];
+        
+        
+        //Temperature
+        double tempInCelcius = [self kelvinToCelsius:[[[[listArray objectAtIndex:indexPath.row]valueForKey:@"temp"]valueForKey:@"day"]doubleValue]];
+        int temp = (int)tempInCelcius;
+        cell.temperatureLabel.text = [NSString stringWithFormat:@"%d\u00B0C",temp];
+        
+        
+        //Date
+        double tempDate = [[[listArray objectAtIndex:indexPath.row]valueForKey:@"dt"]doubleValue];
+        NSString *dateStr = [self convertDate:tempDate];
+        cell.dateLAbel.text = dateStr;
+        
+        
+        //Icon
+        NSString *iconName = [[[[listArray objectAtIndex:indexPath.row]valueForKey:@"weather"]objectAtIndex:0]valueForKey:@"icon"];
+        
+        if ([self.cache objectForKey:iconName]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                cell.iconImageView.image = [self.cache objectForKey:iconName];
+            });
+            //NSLog(@"Cached image used, no need to download it");
+            
+        }else{
+            //NSLog(@"Downloading...");
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                UIImage *weatherImage = [UIImage imageWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:[NSString stringWithFormat:@"%@%@.png",IMAGE_URL_STRING,iconName]]]];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [cell.iconImageView setImage:weatherImage];
+                     [self.cache setObject:weatherImage forKey:iconName];
+                });
+                
+            });
+            
+        }
+        
+    } @catch (NSException *exception) {
+        NSLog(@"exception = %@",exception.reason);
+    } @finally {
+        return cell;
+    }
     
-    return cell;
-    
-}
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
-{
-    return [[SharedClient sharedInstance].cityArray count];
 }
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath{
     return 100.0;
 }
+#pragma mark - CLLocationManagerDelegate
+
+- (void)locationManager:(CLLocationManager *)manager didFailWithError:(NSError *)error
+{
+    NSLog(@"didFailWithError: %@", error);
+
+}
+
+- (void)locationManager:(CLLocationManager *)manager didUpdateToLocation:(CLLocation *)newLocation fromLocation:(CLLocation *)oldLocation
+{
+    NSLog(@"didUpdateToLocation: %@", newLocation);
+    CLLocation *currentLocation = newLocation;
+    
+    // Stop Location Manager
+    [locationManager stopUpdatingLocation];
+    
+    // Reverse Geocoding
+    NSLog(@"Resolving the Address");
+    [geocoder reverseGeocodeLocation:currentLocation completionHandler:^(NSArray *placemarks, NSError *error) {
+        NSLog(@"Found placemarks: %@, error: %@", placemarks, error);
+        if (error == nil && [placemarks count] > 0) {
+            placemark = [placemarks lastObject];
+            NSString *city = placemark.addressDictionary[@"City"];
+            NSLog(@"City Name - %@",city);
+            [self makeWeatherRequestForCity:city];
+            
+        } else {
+            NSLog(@"%@", error.debugDescription);
+        }
+    }];
+     
+}
+
+-(void)makeWeatherRequestForCity:(NSString *)city{
+    
+    mainArr=[[NSMutableArray alloc]init]; // to store values
+    NSString *urlString =[NSString stringWithFormat:@"%@q=%@&APPID=%@&cnt=15",BASE_URL_STRING,city,kOpenWeatherMapAPIKey];
+    
+    NSLog(@"url string - %@",urlString);
+    NSURL *url =[NSURL URLWithString:urlString];
+    NSURLRequest *request = [NSURLRequest requestWithURL:url];
+
+    @try{
+        
+        NSURLSession *session = [NSURLSession sharedSession];
+        [[session dataTaskWithRequest:request completionHandler:^(NSData *responseData,NSURLResponse *response,NSError *error){
+            if (responseData) {
+                NSArray *parsedObject= [NSJSONSerialization JSONObjectWithData:responseData options:NSJSONReadingMutableContainers error:&error];
+                listArray = [parsedObject valueForKey:@"list"];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self.weatherInfoTable reloadData];
+                });
+            }
+            
+        }]resume];
+        
+    }@catch(NSException *exception){
+        NSLog(@"Exception - %@",exception.reason);
+    }
+    
+}
+
 - (void)didReceiveMemoryWarning
 {
     [super didReceiveMemoryWarning];
